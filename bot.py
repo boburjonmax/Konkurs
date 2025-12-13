@@ -108,28 +108,21 @@ def db_get_name(user_id):
 
 def get_prizes_list():
     return [
-        """BookLabEduMen tomonidan tashkil etilgan konkursda ishtirok eting va bir qancha mukofotlarni yutib oling!
-
-Sovrinlar:
-
-1. 5 kitob+Bunker+Surprise 
-2. 5 kitob+Mafia
-3. 3 kitob+Bloknot+Uno
-4. 3 kitob+Yangi yil surprise+bookmark
-5. 3 kitob+Uno+bookmark
-6. 3 kitob+bookmark
-7. 2 kitob+1 kg banan+bookmark
-8-9-10. 2 kitob+bookmark
-11. 60000 
-12. 40000 so'm
-13. 1 kitob
-14. 30000 so'm
-15. 20000 so'm
-
-🔽Ishtirok etish uchun start bosing:
-
-"Referal havola orqali do'stlaringizni taklif qiling va sovrinlarni qo'lga kiriting."
-"""
+        "5 kitob + Bunker + Surprise",           # 1-o'rin
+        "5 kitob + Mafia",                       # 2-o'rin
+        "3 kitob + Bloknot + Uno",               # 3-o'rin
+        "3 kitob + Yangi yil surprise + bookmark", # 4-o'rin
+        "3 kitob + Uno + bookmark",              # 5-o'rin
+        "3 kitob + bookmark",                    # 6-o'rin
+        "2 kitob + 1 kg banan + bookmark",       # 7-o'rin
+        "2 kitob + bookmark",                    # 8-o'rin
+        "2 kitob + bookmark",                    # 9-o'rin
+        "2 kitob + bookmark",                    # 10-o'rin
+        "60 000 so'm",                           # 11-o'rin
+        "40 000 so'm",                           # 12-o'rin
+        "1 kitob",                               # 13-o'rin
+        "30 000 so'm",                           # 14-o'rin
+        "20 000 so'm"                            # 15-o'rin
     ]
 
 
@@ -429,15 +422,26 @@ Viktorinada ishtirok etish👇
 async def send_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     top_users = db_get_top_users(15)
     prizes = get_prizes_list()
-    text = "🏆 REYTING (TOP 15):\n\n"
+    
+    text = "🏆 **REYTING (TOP 15):**\n\n"
 
     if not top_users:
         text += "Hozircha natijalar yo'q."
     else:
         for idx, (uid, count) in enumerate(top_users, 1):
             name = db_get_name(uid)
-            prize = prizes[idx - 1] if idx <= len(prizes) else "Sovg'a"
-            text += f"{idx}-o'rin - {name} - {count} ball - {prize}\n"
+            # Ism juda uzun bo'lsa qisqartiramiz
+            if len(name) > 20:
+                name = name[:20] + "..."
+            
+            # Sovrinni aniqlaymiz (agar ro'yxatda bo'lsa)
+            if idx <= len(prizes):
+                prize = prizes[idx - 1] # Ro'yxatdan olamiz
+                prize_text = f"🎁 ({prize})"
+            else:
+                prize_text = "" # 15 tadan keyingilarga sovrin yo'q
+
+            text += f"{idx}-o'rin: {name} — {count} ball {prize_text}\n"
 
     await update.message.reply_text(text)
 
