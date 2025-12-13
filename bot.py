@@ -33,7 +33,7 @@ ADMIN_USER = "@okgoo"
 BOT_USERNAME = "bookclub_konkurs_bot"
 
 # Rasmning to'g'ridan-to'g'ri linki
-PHOTO_URL = "https://i.ibb.co/gM8k2J2v/image.png"
+PHOTO_URL = "https://ibb.co/k2Hhm9P3"
 
 # Logging
 logging.basicConfig(
@@ -108,22 +108,30 @@ def db_get_name(user_id):
 
 def get_prizes_list():
     return [
-        "5ta kitob + Bunker",
-        "5ta kitob + Mafia",
-        "3ta kitob + Blaknot + Uno",
-        "3 kitob + 1kg banan + bookmark",
-        "3 kitob + Uno + bookmark",
-        "3 kitob + bookmark",
-        "2ta kitob + Yangi yil surprise + bookmark",
-        "2ta kitob + bookmark",
-        "2ta kitob + bookmark",
-        "2ta kitob + bookmark",
-        "60k so'm",
-        "40k so'm",
-        "1ta kitob",
-        "30k so'm",
-        "20k so'm"
+        """BookLabEduMen tomonidan tashkil etilgan konkursda ishtirok eting va bir qancha mukofotlarni yutib oling!
+
+Sovrinlar:
+
+1. 5 kitob+Bunker+Surprise 
+2. 5 kitob+Mafia
+3. 3 kitob+Bloknot+Uno
+4. 3 kitob+Yangi yil surprise+bookmark
+5. 3 kitob+Uno+bookmark
+6. 3 kitob+bookmark
+"7. 2 kitob+1 kg banan+bookmark"
+8-9-10. 2 kitob+bookmark
+11. 60000 
+12. 40000 so'm
+13. 1 kitob
+14. 30000 so'm
+15. 20000 so'm
+
+🔽Ishtirok etish uchun start bosing:
+
+"Referal havola orqali do'stlaringizni taklif qiling va sovrinlarni qo'lga kiriting."
+"""
     ]
+
 
 def generate_captcha_image():
     width, height = 280, 100
@@ -252,16 +260,26 @@ async def check_sub_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer("❌ Hali to'liq obuna bo'lmadingiz. Iltimos, ikkala kanalga ham a'zo bo'ling!", show_alert=True)
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # --- YANGI QO'SHILGAN QISM ---
+    # Agar user yoki xabar yo'q bo'lsa (masalan, kanal posti), funksiyani to'xtatamiz
+    if not update.effective_user or not update.message:
+        return
+    # -----------------------------
+
     user_id = update.effective_user.id
     text = update.message.text
     
     db_user = db_get_user(user_id)
+    
+    # Agar user bazada bo'lmasa, /start bosishini so'raymiz
     if not db_user:
         await start(update, context)
         return
 
     user_state = db_user[5]
     is_verified = db_user[4]
+
+    # ... kod davom etadi ...
 
     # 1. Ismni qabul qilish
     if user_state == 'awaiting_name':
