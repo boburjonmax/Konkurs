@@ -118,7 +118,7 @@ Sovrinlar:
 4. 3 kitob+Yangi yil surprise+bookmark
 5. 3 kitob+Uno+bookmark
 6. 3 kitob+bookmark
-"7. 2 kitob+1 kg banan+bookmark"
+7. 2 kitob+1 kg banan+bookmark
 8-9-10. 2 kitob+bookmark
 11. 60000 
 12. 40000 so'm
