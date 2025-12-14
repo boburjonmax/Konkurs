@@ -543,10 +543,9 @@ async def send_invite_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     msg_text = f"""#diqqat_konkurs
 
-Book Club tomonidan o'tkazilayotgan Yangi yil konkursiga xush kelibsiz! 🎉
-Bu yerda siz do'stlaringizni taklif qilib, ajoyib sovrinlar yutishingiz mumkin!
+🚀 BookLabEduMen tomonidan tashkil etilgan super konkursda ishtirok eting va kitoblar, stol o'yinlar hamda pul mukofotlaridan birini qo'lga kiriting!
 
-✅ G'oliblar 12.18.2025 da e'lon qilinadi.
+✅ G'oliblar 20.12.2025 21:00 da e'lon qilinadi.
 Viktorinada ishtirok etish👇
 {ref_link}"""
 
