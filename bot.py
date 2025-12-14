@@ -3,7 +3,8 @@ import random
 import string
 import io
 import sqlite3
-import csv   # 👈 MANA SHUNI QO'SHING (import sqlite3 dan keyin)
+import csv
+import os
 from PIL import Image, ImageDraw, ImageFont
 from telegram import (
     Update, 
@@ -27,8 +28,8 @@ from telegram.error import BadRequest
 TOKEN = "7695068578:AAGHYw38i6e8vPKv9YiQ4RvpAjrjOhVS4zs"
 CHANNEL_1 = "@tsuebookclub"
 CHANNEL_2 = "@MantiqLab"
-CHANNEL_3 = "@kinomen_2025"   # <-- Yangi kanal
-CHANNEL_4 = "@Edu_Corner"  # <-- Yangi kanal
+CHANNEL_3 = "@kinomen_2025"
+CHANNEL_4 = "@Edu_Corner"
 
 ADMIN_USER = "@okgoo"
 BOT_USERNAME = "bookclub_konkurs_bot"
@@ -44,11 +45,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- MA'LUMOTLAR BAZASI (SQLite) ---
-# --- MA'LUMOTLAR BAZASI (SQLite) ---
-import os  # Fayl tizimini tekshirish uchun kerak
-
 # Agar Railway serverida bo'lsak, bazani 'Volume' (/app/data) ichida saqlaymiz.
-# Agar o'z kompyuterimizda bo'lsak, shu papkaning o'zida saqlaymiz.
 if os.path.exists('/app/data'):
     DB_PATH = '/app/data/konkurs.db'
 else:
@@ -179,45 +176,37 @@ async def check_channels(user_id, context):
         except Exception as e:
             logger.error(f"Kanal xato: {e}")
             return False
-    return 
+    return True  # <--- TUZATILDI: True qaytarishi shart!
 
 # ---------------------------------------------------------
-#                 ADMIN BUYRUQLARI (6 ta)
+#                 ADMIN BUYRUQLARI (8 ta)
 # ---------------------------------------------------------
 
-# Admin ekanligini tekshirish uchun yordamchi funksiya
 def is_admin(user):
-    # Username orqali tekshirish (@ belgisi bilan)
     if user.username and f"@{user.username}" == ADMIN_USER:
         return True
     return False
 
-# 1. /stat - Statistika
+# 1. /stat
 async def admin_stat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
-
     cursor.execute('SELECT COUNT(*) FROM users')
     total = cursor.fetchone()[0]
-    
     cursor.execute('SELECT COUNT(*) FROM users WHERE verified=1')
     verified = cursor.fetchone()[0]
-    
     msg = f"📊 **Bot Statistikasi:**\n\n👥 Jami: {total}\n✅ Tasdiqlangan: {verified}"
     await update.message.reply_text(msg, parse_mode='Markdown')
 
-# 2. /xabar - Hammaga xabar yuborish
+# 2. /xabar
 async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
-
     msg = " ".join(context.args)
     if not msg:
-        await update.message.reply_text("❌ Xabar yo'q.\nMasalan: `/xabar Salom hammaga!`", parse_mode='Markdown')
+        await update.message.reply_text("❌ Xabar yo'q.\nMasalan: `/xabar Salom`", parse_mode='Markdown')
         return
-
     await update.message.reply_text("⏳ Xabar yuborish boshlandi...")
     cursor.execute('SELECT user_id FROM users')
     users = cursor.fetchall()
-    
     sent, blocked = 0, 0
     for row in users:
         try:
@@ -225,124 +214,96 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sent += 1
         except:
             blocked += 1
-    
-    await update.message.reply_text(f"✅ Tugadi.\nYuborildi: {sent}\nBloklaganlar: {blocked}")
+    await update.message.reply_text(f"✅ Tugadi.\nYuborildi: {sent}\nBlok: {blocked}")
 
-# 3. /export - Excel fayl olish
+# 3. /export
 async def admin_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
     await update.message.reply_text("📂 Fayl tayyorlanmoqda...")
-
     cursor.execute('SELECT user_id, name, phone, verified, referrer_id FROM users')
     data = cursor.fetchall()
-
     file = io.StringIO()
     writer = csv.writer(file)
     writer.writerow(['ID', 'Ism', 'Telefon', 'Tasdiqlangan', 'Kim chaqirgan'])
     writer.writerows(data)
-    
     file.seek(0)
     bio = io.BytesIO(file.getvalue().encode('utf-8'))
     bio.name = 'users_list.csv'
-
     await update.message.reply_document(document=bio, caption="📁 Barcha foydalanuvchilar")
 
-# 4. /info ID - Odam haqida ma'lumot
+# 4. /info
 async def admin_check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
     if not context.args:
-        await update.message.reply_text("ID kiritilmadi. Masalan: `/info 123456`", parse_mode='Markdown')
+        await update.message.reply_text("ID kiritilmadi.", parse_mode='Markdown')
         return
-
     tid = context.args[0]
     u = db_get_user(tid)
     if not u:
         await update.message.reply_text("❌ Topilmadi.")
         return
-
     cursor.execute('SELECT COUNT(*) FROM users WHERE referrer_id = ? AND verified=1', (tid,))
     score = cursor.fetchone()[0]
-
     ref_by = "O'zi kirgan"
     if u[3]:
         r_user = db_get_user(u[3])
         if r_user: ref_by = f"{r_user[1]} (ID: {u[3]})"
-
     msg = (f"👤 **Info:**\n🆔 ID: `{u[0]}`\n📝 Ism: {u[1]}\n📞 Tel: {u[2]}\n"
            f"🏆 Ball: {score}\n🔗 Kim chaqirgan: {ref_by}")
     await update.message.reply_text(msg, parse_mode='Markdown')
 
-# 5. /delete ID - Odamni o'chirish
+# 5. /delete
 async def admin_delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
     if not context.args:
-        await update.message.reply_text("ID kiritilmadi. Masalan: `/delete 123456`", parse_mode='Markdown')
+        await update.message.reply_text("ID kiritilmadi.", parse_mode='Markdown')
         return
-
     tid = context.args[0]
     cursor.execute('DELETE FROM users WHERE user_id = ?', (tid,))
     conn.commit()
     await update.message.reply_text(f"✅ ID {tid} bazadan o'chirildi.")
 
-# 6. /top_file - Reyting fayli
+# 6. /top_file
 async def admin_top_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
-    
     top = db_get_top_users(100)
     txt = "🏆 TOP 100 REYTING:\n\n"
     for i, (uid, cnt) in enumerate(top, 1):
         name = db_get_name(uid)
         txt += f"{i}. {name} (ID: {uid}) - {cnt} ball\n"
-
     bio = io.BytesIO(txt.encode('utf-8'))
     bio.name = 'top_reyting.txt'
     await update.message.reply_document(document=bio, caption="📈 To'liq reyting")
 
-    # ---------------------------------------------------------
-# --- YANGI QO'SHIMCHA FUNKSIYALAR (Backup va Search) ---
-
-# 7. /backup - Baza faylini tashlab berish
+# 7. /backup
 async def admin_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
-    
     await update.message.reply_text("📦 Baza fayli yuklanmoqda...")
-    
     try:
-        # DB_PATH o'zgaruvchisi tepadagi kodda aniqlangan
         with open(DB_PATH, 'rb') as f:
             await update.message.reply_document(
-                document=f,
-                filename="konkurs_backup.db",
-                caption=f"💾 Baza nusxasi: {update.message.date}"
+                document=f, filename="konkurs_backup.db", caption=f"💾 Baza: {update.message.date}"
             )
     except Exception as e:
         await update.message.reply_text(f"❌ Xatolik: {e}")
 
-# 8. /search - Ism yoki Tel orqali qidirish
+# 8. /search
 async def admin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user): return
-    
     if not context.args:
-        await update.message.reply_text("Qidirish uchun so'z yozing.\nMasalan: `/search Bobur` yoki `/search 99890`", parse_mode='Markdown')
+        await update.message.reply_text("Qidiruv so'zini yozing.", parse_mode='Markdown')
         return
-
     keyword = context.args[0]
-    # Ismi yoki telefon raqami o'xshash bo'lganlarni qidiramiz
     cursor.execute("SELECT user_id, name, phone FROM users WHERE name LIKE ? OR phone LIKE ?", (f'%{keyword}%', f'%{keyword}%'))
     results = cursor.fetchall()
-
     if not results:
         await update.message.reply_text("❌ Hech kim topilmadi.")
         return
-
-    msg = "🔍 **Qidiruv natijalari:**\n\n"
+    msg = "🔍 **Natijalar:**\n\n"
     for row in results:
         msg += f"👤 {row[1]} (Tel: {row[2]}) -> ID: `{row[0]}`\n"
-    
     await update.message.reply_text(msg, parse_mode='Markdown')
 
-# ---------------------------------------------------------
-#                 ADMIN KODLARI TUGADI
 # ---------------------------------------------------------
 
 # --- HANDLERS ---
@@ -381,10 +342,8 @@ async def send_subscription_message(update):
     keyboard = [
         [InlineKeyboardButton("📢 Kanal 1", url=f"https://t.me/{CHANNEL_1.lstrip('@')}")],
         [InlineKeyboardButton("📢 Kanal 2", url=f"https://t.me/{CHANNEL_2.lstrip('@')}")],
-        # Yangi qo'shilgan tugmalar:
         [InlineKeyboardButton("📢 Kanal 3", url=f"https://t.me/{CHANNEL_3.lstrip('@')}")],
         [InlineKeyboardButton("📢 Kanal 4", url=f"https://t.me/{CHANNEL_4.lstrip('@')}")],
-        
         [InlineKeyboardButton("✅ A'zo bo'ldim", callback_data="check_subscription")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -401,26 +360,17 @@ async def send_subscription_message(update):
         await update.message.reply_text(text, reply_markup=reply_markup)
 
 async def check_sub_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    TUZATILGAN QISM: 
-    Foydalanuvchi "A'zo bo'ldim"ni bosganda, agar u oldin ro'yxatdan o'tgan bo'lsa,
-    qaytadan ism so'ramasdan, to'g'ri menyuga o'tkazish.
-    """
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
 
     if await check_channels(user_id, context):
-        # User ma'lumotlarini olish
         db_user = db_get_user(user_id)
-        
-        # Agar user allaqachon tasdiqlangan (verified=1) bo'lsa
         if db_user and db_user[4]: 
             await query.delete_message()
             await query.message.reply_text("✅ Obuna qayta tasdiqlandi. Davom etishingiz mumkin.")
-            await show_main_menu(update, context) # <-- MUHIM: Menyuni chiqarish
+            await show_main_menu(update, context)
         else:
-            # Agar yangi user bo'lsa, ism so'rashga o'tish
             db_update_state(user_id, 'awaiting_name')
             await query.delete_message()
             await query.message.reply_text("✅ Rahmat! A'zolik tasdiqlandi.\n\nIltimos, Ismingizni yozib yuboring:")
@@ -428,26 +378,20 @@ async def check_sub_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer("❌ Hali to'liq obuna bo'lmadingiz. Iltimos, ikkala kanalga ham a'zo bo'ling!", show_alert=True)
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # --- YANGI QO'SHILGAN QISM ---
-    # Agar user yoki xabar yo'q bo'lsa (masalan, kanal posti), funksiyani to'xtatamiz
+    # Agar user yoki xabar yo'q bo'lsa funksiyani to'xtatamiz
     if not update.effective_user or not update.message:
         return
-    # -----------------------------
 
     user_id = update.effective_user.id
     text = update.message.text
-    
     db_user = db_get_user(user_id)
     
-    # Agar user bazada bo'lmasa, /start bosishini so'raymiz
     if not db_user:
         await start(update, context)
         return
 
     user_state = db_user[5]
     is_verified = db_user[4]
-
-    # ... kod davom etadi ...
 
     # 1. Ismni qabul qilish
     if user_state == 'awaiting_name':
@@ -475,7 +419,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 3. Asosiy Menyu
     if is_verified:
-        # A'zolikni qayta tekshirish
         if not await check_channels(user_id, context):
             await update.message.reply_text("⚠️ Diqqat! Siz kanallardan chiqib ketgansiz.")
             await send_subscription_message(update)
@@ -540,7 +483,6 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
     await show_main_menu(update, context)
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Agar callback_query bo'lsa (A'zo bo'ldim tugmasidan kelgan bo'lsa)
     if update.callback_query:
         message_func = update.callback_query.message.reply_text
     else:
@@ -561,32 +503,14 @@ async def send_invite_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Book Club tomonidan o'tkazilayotgan Yangi yil konkursiga xush kelibsiz! 🎉
 Bu yerda siz do'stlaringizni taklif qilib, ajoyib sovrinlar yutishingiz mumkin!
-1-o'rin - 5ta kitob + Bunker
-2-o'rin - 5ta kitob + Mafia 
-3-o'rin - 3ta kitob + Bloknot +Uno 
-4-o'rin - 3 kitob + 1kg banan + bookmark 
-5-o'rin - 3 kitob + Uno + bookmark 
-6-o'rin - 3 kitob + bookmark 
-7-o'rin - 2ta kitob + Yangi yil surprise + bookmark 
-8-o'rin - 2ta kitob + bookmark
-9-o'rin - 2ta kitob + bookmark
-10-o'rin - 2ta kitob + bookmark 
-11-o'rin - 60k so'm 
-12-o'rin - 40k so'm 
-13-o'rin - 1ta kitob 
-14-o'rin - 30k so'm 
-15-o'rin - 20k so'm 
 
 ✅ G'oliblar 12.18.2025 da e'lon qilinadi.
 Viktorinada ishtirok etish👇
 {ref_link}"""
 
-    kb = [[InlineKeyboardButton("🔗 Linkni ulashish", url=
-                                
-                                
-                                
-                                
-                                f"https://t.me/share/url?url={ref_link}")]]
+    # Linkni toza qilib yozish
+    share_url = f"https://t.me/share/url?url={ref_link}"
+    kb = [[InlineKeyboardButton("🔗 Linkni ulashish", url=share_url)]]
     
     try:
         await update.message.reply_photo(
@@ -609,16 +533,14 @@ async def send_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         for idx, (uid, count) in enumerate(top_users, 1):
             name = db_get_name(uid)
-            # Ism juda uzun bo'lsa qisqartiramiz
             if len(name) > 20:
                 name = name[:20] + "..."
             
-            # Sovrinni aniqlaymiz (agar ro'yxatda bo'lsa)
             if idx <= len(prizes):
-                prize = prizes[idx - 1] # Ro'yxatdan olamiz
+                prize = prizes[idx - 1]
                 prize_text = f"🎁 ({prize})"
             else:
-                prize_text = "" # 15 tadan keyingilarga sovrin yo'q
+                prize_text = ""
 
             text += f"{idx}-o'rin: {name} — {count} ball {prize_text}\n"
 
@@ -630,15 +552,10 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     application = Application.builder().token(TOKEN).build()
 
-    # --- Asosiy Start buyrug'i ---
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", send_help)) # Foydalanuvchilar uchun
 
-    # --- YANGI FOYDALANUVCHI BUYRUG'I ---
-    # /admin bosganda 'send_help' funksiyasi ishlaydi (Admin: @okgoo deb javob beradi)
-    application.add_handler(CommandHandler("admin", send_help))
-    # ------------------------------------
-
-    # --- ADMIN BUYRUQLARI (Siz uchun) ---
+    # --- ADMIN ---
     application.add_handler(CommandHandler("stat", admin_stat))
     application.add_handler(CommandHandler("xabar", admin_broadcast))
     application.add_handler(CommandHandler("export", admin_export))
@@ -648,7 +565,7 @@ def main():
     application.add_handler(CommandHandler("backup", admin_backup))
     application.add_handler(CommandHandler("search", admin_search))
 
-    # --- Qolgan handlerlar ---
+    # --- HANDLERS ---
     application.add_handler(CallbackQueryHandler(check_sub_callback, pattern="^check_subscription$"))
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
