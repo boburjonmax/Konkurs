@@ -633,18 +633,20 @@ def main():
     # --- Asosiy Start buyrug'i ---
     application.add_handler(CommandHandler("start", start))
 
-    # --- ADMIN BUYRUQLARI (Jami 8 ta bo'ldi) ---
-    application.add_handler(CommandHandler("stat", admin_stat))       # 1. Statistika
-    application.add_handler(CommandHandler("xabar", admin_broadcast)) # 2. Xabar yuborish
-    application.add_handler(CommandHandler("export", admin_export))   # 3. Excel olish
-    application.add_handler(CommandHandler("info", admin_check_user)) # 4. ID tekshirish
-    application.add_handler(CommandHandler("delete", admin_delete_user)) # 5. O'chirish
-    application.add_handler(CommandHandler("top_file", admin_top_file))  # 6. Reyting fayli
-    
-    # --- YANGI QO'SHILGANLAR ---
-    application.add_handler(CommandHandler("backup", admin_backup))   # 7. Baza nusxasi
-    application.add_handler(CommandHandler("search", admin_search))   # 8. Qidiruv
-    # -------------------------------------
+    # --- YANGI FOYDALANUVCHI BUYRUG'I ---
+    # /admin bosganda 'send_help' funksiyasi ishlaydi (Admin: @okgoo deb javob beradi)
+    application.add_handler(CommandHandler("admin", send_help))
+    # ------------------------------------
+
+    # --- ADMIN BUYRUQLARI (Siz uchun) ---
+    application.add_handler(CommandHandler("stat", admin_stat))
+    application.add_handler(CommandHandler("xabar", admin_broadcast))
+    application.add_handler(CommandHandler("export", admin_export))
+    application.add_handler(CommandHandler("info", admin_check_user))
+    application.add_handler(CommandHandler("delete", admin_delete_user))
+    application.add_handler(CommandHandler("top_file", admin_top_file))
+    application.add_handler(CommandHandler("backup", admin_backup))
+    application.add_handler(CommandHandler("search", admin_search))
 
     # --- Qolgan handlerlar ---
     application.add_handler(CallbackQueryHandler(check_sub_callback, pattern="^check_subscription$"))
