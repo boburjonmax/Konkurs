@@ -437,9 +437,48 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     db_user = db_get_user(user_id)
     
+    # Faqat telefon so'ralgan bosqichda ishlashi kerak
     if db_user and db_user[5] == 'awaiting_phone':
         contact = update.message.contact
-        db_update_phone(user_id, contact.phone_number)
+
+        # 1-HIMOYA: BIROVNING KONTAKTINI JO'NATISHNI BLOKLASH
+        # Telegramda har bir kontaktning "user_id"si bo'ladi.
+        # Agar jo'natilgan kontaktning IDsi foydalanuvchi IDsi bilan bir xil bo'lmasa, demak birovnikini jo'natyapti.
+        if contact.user_id and contact.user_id != user_id:
+            await update.message.reply_text(
+                "❌ Iltimos, faqat o'zingizning telefon raqamingizni yuboring!\n"
+                "Pastdagi 📱 tugmani bosing."
+            )
+            return
+
+        # Raqamni olamiz va to'g'irlaymiz
+        phone = contact.phone_number
+        if not phone.startswith('+'):
+            phone = '+' + phone 
+
+        # 2-HIMOYA: FAQAT O'ZBEKISTON RAQAMLARI
+        if not phone.startswith('+998'):
+            await update.message.reply_text(
+                "❌ Kechirasiz, konkursda faqat O'zbekiston (+998) raqamlari qatnashishi mumkin."
+            )
+            return
+
+        # 3-HIMOYA: RAQAM BAZADA BORLIGINI TEKSHIRISH
+        # (Siz so'ragan qism shu yerda turishi shart)
+        cursor.execute('SELECT user_id FROM users WHERE phone = ?', (phone,))
+        existing_user = cursor.fetchone()
+
+        # Agar bazadan shunday raqam topilsa va u HOZIRGI odam bo'lmasa:
+        if existing_user and existing_user[0] != user_id:
+            await update.message.reply_text(
+                "❌ Bu telefon raqam allaqachon ro'yxatdan o'tgan!"
+            )
+            return
+
+        # --- HAMMASI JOYIDA BO'LSA ---
+        # Raqamni bazaga yozamiz
+        db_update_phone(user_id, phone)
+        # Statusni o'zgartiramiz
         db_update_state(user_id, 'awaiting_captcha')
         
         await update.message.reply_text("Raqam qabul qilindi ✅", reply_markup=ReplyKeyboardRemove())
