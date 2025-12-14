@@ -43,7 +43,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- MA'LUMOTLAR BAZASI (SQLite) ---
-conn = sqlite3.connect('konkurs.db', check_same_thread=False)
+# --- MA'LUMOTLAR BAZASI (SQLite) ---
+import os  # Fayl tizimini tekshirish uchun kerak
+
+# Agar Railway serverida bo'lsak, bazani 'Volume' (/app/data) ichida saqlaymiz.
+# Agar o'z kompyuterimizda bo'lsak, shu papkaning o'zida saqlaymiz.
+if os.path.exists('/app/data'):
+    DB_PATH = '/app/data/konkurs.db'
+else:
+    DB_PATH = 'konkurs.db'
+
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute('''
@@ -385,11 +395,10 @@ async def send_invite_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_text = f"""#diqqat_konkurs
 
 Book Club tomonidan o'tkazilayotgan Yangi yil konkursiga xush kelibsiz! 🎉
-G‘oliblari quyidagicha taqdirlanadi:
-
+'Bu yerda siz do'stlaringizni taklif qilib, ajoyib sovrinlar yutishingiz mumkin!
 1-o'rin - 5ta kitob + Bunker
 2-o'rin - 5ta kitob + Mafia 
-3-o'rin - 3ta kitob + Blaknot +Uno 
+3-o'rin - 3ta kitob + Bloknot +Uno 
 4-o'rin - 3 kitob + 1kg banan + bookmark 
 5-o'rin - 3 kitob + Uno + bookmark 
 6-o'rin - 3 kitob + bookmark 
@@ -400,14 +409,19 @@ G‘oliblari quyidagicha taqdirlanadi:
 11-o'rin - 60k so'm 
 12-o'rin - 40k so'm 
 13-o'rin - 1ta kitob 
-14-o'rin - 30k soʻm 
+14-o'rin - 30k so'm 
 15-o'rin - 20k so'm 
 
-✅ G‘oliblar 12.18.2025 da e'lon qilinadi.
+✅ G'oliblar 12.18.2025 da e'lon qilinadi.
 Viktorinada ishtirok etish👇
 {ref_link}"""
 
-    kb = [[InlineKeyboardButton("🔗 Linkni ulashish", url=f"https://t.me/share/url?url={ref_link}")]]
+    kb = [[InlineKeyboardButton("🔗 Linkni ulashish", url=
+                                
+                                
+                                
+                                
+                                f"https://t.me/share/url?url={ref_link}")]]
     
     try:
         await update.message.reply_photo(
@@ -423,7 +437,7 @@ async def send_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     top_users = db_get_top_users(15)
     prizes = get_prizes_list()
     
-    text = "🏆 **REYTING (TOP 15):**\n\n"
+    text = "🏆 **Reyting (TOP 15):**\n\n"
 
     if not top_users:
         text += "Hozircha natijalar yo'q."
