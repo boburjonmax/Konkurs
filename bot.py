@@ -97,14 +97,20 @@ def db_set_verified(user_id):
     conn.commit()
 
 def db_get_top_users(limit=15):
+    # 👇 BU YERGA O'ZINGIZNING RAQAMLI ID-INGIZNI YOZING! (Admin reytingda ko'rinmasligi uchun)
+    # Masalan: ADMIN_ID = 512345678
+    ADMIN_ID = 1814162588 
+
     cursor.execute('''
         SELECT referrer_id, COUNT(*) as count 
         FROM users 
-        WHERE verified = 1 AND referrer_id IS NOT NULL 
+        WHERE verified = 1 
+        AND referrer_id IS NOT NULL 
+        AND referrer_id != ? 
         GROUP BY referrer_id 
         ORDER BY count DESC 
         LIMIT ?
-    ''', (limit,))
+    ''', (ADMIN_ID, limit))
     return cursor.fetchall()
 
 def db_get_name(user_id):
@@ -176,7 +182,7 @@ async def check_channels(user_id, context):
         except Exception as e:
             logger.error(f"Kanal xato: {e}")
             return False
-    return True  # <--- TUZATILDI: True qaytarishi shart!
+    return True
 
 # ---------------------------------------------------------
 #                 ADMIN BUYRUQLARI (8 ta)
@@ -433,6 +439,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await show_main_menu(update, context)
 
+# --- NAKRUTKADAN HIMOYA QILINGAN TELEFON QABUL QILISH ---
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     db_user = db_get_user(user_id)
@@ -441,9 +448,8 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db_user and db_user[5] == 'awaiting_phone':
         contact = update.message.contact
 
-        # 1-HIMOYA: BIROVNING KONTAKTINI JO'NATISHNI BLOKLASH
-        # Telegramda har bir kontaktning "user_id"si bo'ladi.
-        # Agar jo'natilgan kontaktning IDsi foydalanuvchi IDsi bilan bir xil bo'lmasa, demak birovnikini jo'natyapti.
+        # 1-HIMOYA: Birovning raqamini jo'natishni bloklash
+        # (user_id tekshiruvi)
         if contact.user_id and contact.user_id != user_id:
             await update.message.reply_text(
                 "❌ Iltimos, faqat o'zingizning telefon raqamingizni yuboring!\n"
@@ -456,15 +462,14 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not phone.startswith('+'):
             phone = '+' + phone 
 
-        # 2-HIMOYA: FAQAT O'ZBEKISTON RAQAMLARI
+        # 2-HIMOYA: Faqat O'zbekiston raqamlari (+998)
         if not phone.startswith('+998'):
             await update.message.reply_text(
                 "❌ Kechirasiz, konkursda faqat O'zbekiston (+998) raqamlari qatnashishi mumkin."
             )
             return
 
-        # 3-HIMOYA: RAQAM BAZADA BORLIGINI TEKSHIRISH
-        # (Siz so'ragan qism shu yerda turishi shart)
+        # 3-HIMOYA: Bu raqam oldin ishlatilganmi?
         cursor.execute('SELECT user_id FROM users WHERE phone = ?', (phone,))
         existing_user = cursor.fetchone()
 
@@ -475,10 +480,8 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # --- HAMMASI JOYIDA BO'LSA ---
-        # Raqamni bazaga yozamiz
+        # --- HAMMASI JOYIDA ---
         db_update_phone(user_id, phone)
-        # Statusni o'zgartiramiz
         db_update_state(user_id, 'awaiting_captcha')
         
         await update.message.reply_text("Raqam qabul qilindi ✅", reply_markup=ReplyKeyboardRemove())
