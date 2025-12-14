@@ -3,6 +3,7 @@ import random
 import string
 import io
 import sqlite3
+import csv   # 👈 MANA SHUNI QO'SHING (import sqlite3 dan keyin)
 from PIL import Image, ImageDraw, ImageFont
 from telegram import (
     Update, 
@@ -178,7 +179,171 @@ async def check_channels(user_id, context):
         except Exception as e:
             logger.error(f"Kanal xato: {e}")
             return False
-    return True
+    return 
+
+# ---------------------------------------------------------
+#                 ADMIN BUYRUQLARI (6 ta)
+# ---------------------------------------------------------
+
+# Admin ekanligini tekshirish uchun yordamchi funksiya
+def is_admin(user):
+    # Username orqali tekshirish (@ belgisi bilan)
+    if user.username and f"@{user.username}" == ADMIN_USER:
+        return True
+    return False
+
+# 1. /stat - Statistika
+async def admin_stat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total = cursor.fetchone()[0]
+    
+    cursor.execute('SELECT COUNT(*) FROM users WHERE verified=1')
+    verified = cursor.fetchone()[0]
+    
+    msg = f"📊 **Bot Statistikasi:**\n\n👥 Jami: {total}\n✅ Tasdiqlangan: {verified}"
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+# 2. /xabar - Hammaga xabar yuborish
+async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+
+    msg = " ".join(context.args)
+    if not msg:
+        await update.message.reply_text("❌ Xabar yo'q.\nMasalan: `/xabar Salom hammaga!`", parse_mode='Markdown')
+        return
+
+    await update.message.reply_text("⏳ Xabar yuborish boshlandi...")
+    cursor.execute('SELECT user_id FROM users')
+    users = cursor.fetchall()
+    
+    sent, blocked = 0, 0
+    for row in users:
+        try:
+            await context.bot.send_message(chat_id=row[0], text=msg)
+            sent += 1
+        except:
+            blocked += 1
+    
+    await update.message.reply_text(f"✅ Tugadi.\nYuborildi: {sent}\nBloklaganlar: {blocked}")
+
+# 3. /export - Excel fayl olish
+async def admin_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+    await update.message.reply_text("📂 Fayl tayyorlanmoqda...")
+
+    cursor.execute('SELECT user_id, name, phone, verified, referrer_id FROM users')
+    data = cursor.fetchall()
+
+    file = io.StringIO()
+    writer = csv.writer(file)
+    writer.writerow(['ID', 'Ism', 'Telefon', 'Tasdiqlangan', 'Kim chaqirgan'])
+    writer.writerows(data)
+    
+    file.seek(0)
+    bio = io.BytesIO(file.getvalue().encode('utf-8'))
+    bio.name = 'users_list.csv'
+
+    await update.message.reply_document(document=bio, caption="📁 Barcha foydalanuvchilar")
+
+# 4. /info ID - Odam haqida ma'lumot
+async def admin_check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+    if not context.args:
+        await update.message.reply_text("ID kiritilmadi. Masalan: `/info 123456`", parse_mode='Markdown')
+        return
+
+    tid = context.args[0]
+    u = db_get_user(tid)
+    if not u:
+        await update.message.reply_text("❌ Topilmadi.")
+        return
+
+    cursor.execute('SELECT COUNT(*) FROM users WHERE referrer_id = ? AND verified=1', (tid,))
+    score = cursor.fetchone()[0]
+
+    ref_by = "O'zi kirgan"
+    if u[3]:
+        r_user = db_get_user(u[3])
+        if r_user: ref_by = f"{r_user[1]} (ID: {u[3]})"
+
+    msg = (f"👤 **Info:**\n🆔 ID: `{u[0]}`\n📝 Ism: {u[1]}\n📞 Tel: {u[2]}\n"
+           f"🏆 Ball: {score}\n🔗 Kim chaqirgan: {ref_by}")
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+# 5. /delete ID - Odamni o'chirish
+async def admin_delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+    if not context.args:
+        await update.message.reply_text("ID kiritilmadi. Masalan: `/delete 123456`", parse_mode='Markdown')
+        return
+
+    tid = context.args[0]
+    cursor.execute('DELETE FROM users WHERE user_id = ?', (tid,))
+    conn.commit()
+    await update.message.reply_text(f"✅ ID {tid} bazadan o'chirildi.")
+
+# 6. /top_file - Reyting fayli
+async def admin_top_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+    
+    top = db_get_top_users(100)
+    txt = "🏆 TOP 100 REYTING:\n\n"
+    for i, (uid, cnt) in enumerate(top, 1):
+        name = db_get_name(uid)
+        txt += f"{i}. {name} (ID: {uid}) - {cnt} ball\n"
+
+    bio = io.BytesIO(txt.encode('utf-8'))
+    bio.name = 'top_reyting.txt'
+    await update.message.reply_document(document=bio, caption="📈 To'liq reyting")
+
+    # ---------------------------------------------------------
+# --- YANGI QO'SHIMCHA FUNKSIYALAR (Backup va Search) ---
+
+# 7. /backup - Baza faylini tashlab berish
+async def admin_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+    
+    await update.message.reply_text("📦 Baza fayli yuklanmoqda...")
+    
+    try:
+        # DB_PATH o'zgaruvchisi tepadagi kodda aniqlangan
+        with open(DB_PATH, 'rb') as f:
+            await update.message.reply_document(
+                document=f,
+                filename="konkurs_backup.db",
+                caption=f"💾 Baza nusxasi: {update.message.date}"
+            )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Xatolik: {e}")
+
+# 8. /search - Ism yoki Tel orqali qidirish
+async def admin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): return
+    
+    if not context.args:
+        await update.message.reply_text("Qidirish uchun so'z yozing.\nMasalan: `/search Bobur` yoki `/search 99890`", parse_mode='Markdown')
+        return
+
+    keyword = context.args[0]
+    # Ismi yoki telefon raqami o'xshash bo'lganlarni qidiramiz
+    cursor.execute("SELECT user_id, name, phone FROM users WHERE name LIKE ? OR phone LIKE ?", (f'%{keyword}%', f'%{keyword}%'))
+    results = cursor.fetchall()
+
+    if not results:
+        await update.message.reply_text("❌ Hech kim topilmadi.")
+        return
+
+    msg = "🔍 **Qidiruv natijalari:**\n\n"
+    for row in results:
+        msg += f"👤 {row[1]} (Tel: {row[2]}) -> ID: `{row[0]}`\n"
+    
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+# ---------------------------------------------------------
+#                 ADMIN KODLARI TUGADI
+# ---------------------------------------------------------
 
 # --- HANDLERS ---
 
@@ -395,7 +560,7 @@ async def send_invite_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_text = f"""#diqqat_konkurs
 
 Book Club tomonidan o'tkazilayotgan Yangi yil konkursiga xush kelibsiz! 🎉
-'Bu yerda siz do'stlaringizni taklif qilib, ajoyib sovrinlar yutishingiz mumkin!
+Bu yerda siz do'stlaringizni taklif qilib, ajoyib sovrinlar yutishingiz mumkin!
 1-o'rin - 5ta kitob + Bunker
 2-o'rin - 5ta kitob + Mafia 
 3-o'rin - 3ta kitob + Bloknot +Uno 
@@ -465,7 +630,23 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     application = Application.builder().token(TOKEN).build()
 
+    # --- Asosiy Start buyrug'i ---
     application.add_handler(CommandHandler("start", start))
+
+    # --- ADMIN BUYRUQLARI (Jami 8 ta bo'ldi) ---
+    application.add_handler(CommandHandler("stat", admin_stat))       # 1. Statistika
+    application.add_handler(CommandHandler("xabar", admin_broadcast)) # 2. Xabar yuborish
+    application.add_handler(CommandHandler("export", admin_export))   # 3. Excel olish
+    application.add_handler(CommandHandler("info", admin_check_user)) # 4. ID tekshirish
+    application.add_handler(CommandHandler("delete", admin_delete_user)) # 5. O'chirish
+    application.add_handler(CommandHandler("top_file", admin_top_file))  # 6. Reyting fayli
+    
+    # --- YANGI QO'SHILGANLAR ---
+    application.add_handler(CommandHandler("backup", admin_backup))   # 7. Baza nusxasi
+    application.add_handler(CommandHandler("search", admin_search))   # 8. Qidiruv
+    # -------------------------------------
+
+    # --- Qolgan handlerlar ---
     application.add_handler(CallbackQueryHandler(check_sub_callback, pattern="^check_subscription$"))
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
