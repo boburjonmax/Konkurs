@@ -499,9 +499,10 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = update.effective_user.id
     current_user = update.effective_user
     
+    # 1. Bazada tasdiqlangan (verified) deb belgilaymiz
     db_set_verified(user_id)
-    ref_link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
     
+    # 2. Taklif qilgan odamga (Referrer) xabar yuborish qismi
     db_user = db_get_user(user_id)
     referrer_id = db_user[3]
     
@@ -516,12 +517,17 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as e:
             logger.error(f"Referrerga xabar yuborishda xato: {e}")
 
+    # 3. Foydalanuvchiga qisqa tabrik
     await update.message.reply_text(
-        f"✅ Tabriklaymiz! Ro'yxatdan o'tdingiz!\n\n"
-        f"📌 Sizning referral linkingiz:\n`{ref_link}`\n\n"
-        f"Do'stlaringizni taklif qiling va sovg'alar yuting!",
-        parse_mode='Markdown'
+        "✅ Tabriklaymiz! Siz muvaffaqiyatli ro'yxatdan o'tdingiz!\n"
+        "Quyida sizning maxsus havolangiz va yutuqlar ro'yxati 👇"
     )
+
+    # 4. RASM, SOVG'ALAR va LINKNI avtomatik chiqarish
+    # (Bu funksiya sizda bor, u rasm va chiroyli matnni chiqarib beradi)
+    await send_invite_info(update, context)
+
+    # 5. Asosiy menyuni ko'rsatish
     await show_main_menu(update, context)
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
