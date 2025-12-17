@@ -310,6 +310,48 @@ async def admin_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"👤 {row[1]} (Tel: {row[2]}) -> ID: `{row[0]}`\n"
     await update.message.reply_text(msg, parse_mode='Markdown')
 
+# 9. /post - Kanallarga xabar yuborish
+async def admin_post_to_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1. Admin ekanligini tekshiramiz
+    if not is_admin(update.effective_user): return
+
+    # 2. Xabar matnini olamiz
+    msg = " ".join(context.args)
+    
+    # Agar xabar yozilmagan bo'lsa
+    if not msg:
+        await update.message.reply_text(
+            "❌ Xabar matni yo'q.\n"
+            "Namuna: `/post Diqqat! Konkurs natijalari chiqdi!`",
+            parse_mode='Markdown'
+        )
+        return
+
+    await update.message.reply_text("⏳ Kanallarga joylash boshlandi...")
+
+    # 3. Kanallar ro'yxati (Tepadagi o'zgaruvchilardan olamiz)
+    target_channels = [CHANNEL_1, CHANNEL_2, CHANNEL_3, CHANNEL_4]
+    
+    sent_count = 0
+    error_count = 0
+    error_details = ""
+
+    # 4. Har bir kanalga jo'natib chiqamiz
+    for channel in target_channels:
+        try:
+            await context.bot.send_message(chat_id=channel, text=msg)
+            sent_count += 1
+        except Exception as e:
+            error_count += 1
+            error_details += f"\n{channel}: {e}"
+
+    # 5. Hisobot beramiz
+    report = f"✅ **Natija:**\n\n📢 Yuborildi: {sent_count} ta kanalga\n❌ O'xshamadi: {error_count} ta"
+    if error_details:
+        report += f"\n\nXatoliklar:{error_details}"
+        
+    await update.message.reply_text(report)
+
 # ---------------------------------------------------------
 
 # --- HANDLERS ---
@@ -611,11 +653,13 @@ def main():
     application.add_handler(CommandHandler("top_file", admin_top_file))
     application.add_handler(CommandHandler("backup", admin_backup))
     application.add_handler(CommandHandler("search", admin_search))
+    application.add_handler(CommandHandler("post", admin_post_to_channels))
 
     # --- HANDLERS ---
     application.add_handler(CallbackQueryHandler(check_sub_callback, pattern="^check_subscription$"))
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    
 
     print("Bot muvaffaqiyatli ishga tushdi...")
     application.run_polling()
