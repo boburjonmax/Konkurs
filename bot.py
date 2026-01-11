@@ -28,7 +28,7 @@ from telegram.error import BadRequest
 TOKEN = "7695068578:AAGHYw38i6e8vPKv9YiQ4RvpAjrjOhVS4zs"
 CHANNEL_1 = "@tsuebookclub"
 CHANNEL_2 = "@MantiqLab"
-CHANNEL_4 = "@Edu_Corner"
+CHANNEL_3 = "@Edu_Corner"
 
 ADMIN_USER = "@okgoo"
 BOT_USERNAME = "bookclub_konkurs_bot"
