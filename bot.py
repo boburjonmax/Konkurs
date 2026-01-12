@@ -169,7 +169,7 @@ def generate_captcha_image():
     return bio, text
 
 async def check_channels(user_id, context):
-    channels = [CHANNEL_1, CHANNEL_2, CHANNEL_3, CHANNEL_4]
+    channels = [CHANNEL_1, CHANNEL_2, CHANNEL_3]
     for channel in channels:
         try:
             member = await context.bot.get_chat_member(chat_id=channel, user_id=user_id)
@@ -329,7 +329,7 @@ async def admin_post_to_channels(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("⏳ Kanallarga joylash boshlandi...")
 
     # 3. Kanallar ro'yxati (Tepadagi o'zgaruvchilardan olamiz)
-    target_channels = [CHANNEL_1, CHANNEL_2, CHANNEL_3, CHANNEL_4]
+    target_channels = [CHANNEL_1, CHANNEL_2, CHANNEL_3]
     
     sent_count = 0
     error_count = 0
@@ -391,7 +391,6 @@ async def send_subscription_message(update):
         [InlineKeyboardButton("📢 Kanal 2", url=f"https://t.me/{CHANNEL_2.lstrip('@')}")],
         [InlineKeyboardButton("📢 Kanal 3", url=f"https://t.me/{CHANNEL_3.lstrip('@')}")],
         [InlineKeyboardButton("📢 Kanal 4", url=f"https://t.me/{CHANNEL_4.lstrip('@')}")],
-        [InlineKeyboardButton("✅ A'zo bo'ldim", callback_data="check_subscription")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
