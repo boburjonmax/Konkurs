@@ -552,6 +552,253 @@ async def admin_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await update.message.reply_text(msg)
 
+# 12. /send - Bitta userga shaxsiy xabar yuborish
+async def admin_send_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    # Format: /send USER_ID Xabar matni
+    # Masalan: /send 123456789 Salom, qalaysiz?
+    
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "❌ Format noto'g'ri.\n"
+            "Namuna: `/send 123456789 Salom, bu shaxsiy xabar`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        message_text = " ".join(context.args[1:])
+        
+        await update.message.reply_text(f"⏳ Xabar yuborilmoqda user {target_id} ga...")
+        
+        # Xabar yuborish
+        await context.bot.send_message(chat_id=target_id, text=message_text)
+        
+        # Foydalanuvchi nomini olish
+        target_user = db_get_user(target_id)
+        target_name = target_user[1] if target_user else "Noma'lum"
+        
+        await update.message.reply_text(
+            f"✅ Xabar muvaffaqiyatli yuborildi!\n"
+            f"👤 Kimga: {target_name} (ID: {target_id})\n"
+            f"📝 Xabar: {message_text[:50]}..."
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Noto'g'ri ID format. ID raqam bo'lishi kerak.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Xatolik: {e}")
+
+# 13. /send_all - Hammaga, lekin progress bilan
+async def admin_send_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    msg = " ".join(context.args)
+    if not msg:
+        await update.message.reply_text(
+            "❌ Xabar matni yo'q.\n"
+            "Namuna: `/send_all Yangi konkurs haqida!`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    await update.message.reply_text("⏳ Barchaga xabar yuborish boshlandi...")
+    
+    cursor.execute('SELECT user_id FROM users WHERE verified = 1')
+    users = cursor.fetchall()
+    total = len(users)
+    
+    if total == 0:
+        await update.message.reply_text("❌ Hech qanday tasdiqlangan foydalanuvchi yo'q")
+        return
+    
+    sent = 0
+    blocked = 0
+    errors = []
+    
+    # Progress xabari
+    progress_msg = await update.message.reply_text(f"📤 Progress: 0/{total} (0%)")
+    
+    import asyncio
+    import time
+    
+    start_time = time.time()
+    
+    for i, row in enumerate(users):
+        user_id = row[0]
+        
+        try:
+            await context.bot.send_message(chat_id=user_id, text=msg)
+            sent += 1
+            
+            # Har 50 ta xabardan keyin progress yangilash
+            if i % 50 == 0 or i == total - 1:
+                percentage = (i + 1) / total * 100
+                elapsed = time.time() - start_time
+                eta = (elapsed / (i + 1)) * (total - i - 1) if i > 0 else 0
+                
+                try:
+                    await progress_msg.edit_text(
+                        f"📤 Progress: {i+1}/{total} ({percentage:.1f}%)\n"
+                        f"✅ Yuborildi: {sent}\n"
+                        f"❌ Blok: {blocked}\n"
+                        f"⏱️ Qolgan vaqt: {eta/60:.1f} min"
+                    )
+                except:
+                    pass
+            
+            # Har 30 ta xabardan keyin 1 soniya pauza (Telegram limiti uchun)
+            if i % 30 == 0 and i > 0:
+                await asyncio.sleep(1)
+                
+        except Exception as e:
+            blocked += 1
+            errors.append(f"User {user_id}: {str(e)[:50]}")
+    
+    # Yakuniy hisobot
+    elapsed_time = time.time() - start_time
+    
+    report = (f"✅ **Xabar yuborish tugadi!**\n\n"
+              f"📊 **Natijalar:**\n"
+              f"👥 Jami: {total} ta\n"
+              f"✅ Yuborildi: {sent} ta\n"
+              f"❌ Blok: {blocked} ta\n"
+              f"⏱️ Vaqt: {elapsed_time/60:.1f} minut\n"
+              f"📈 Muvaffaqiyat: {sent/total*100:.1f}%")
+    
+    if errors:
+        report += f"\n\n❌ **Xatolar ({min(5, len(errors))} ta):**\n" + "\n".join(errors[:5])
+    
+    await update.message.reply_text(report, parse_mode='Markdown')
+
+# 14. /send_group - Guruhga xabar yuborish (bir necha ID ga)
+async def admin_send_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    # Format: /send_group ID1 ID2 ID3 Xabar matni
+    # Masalan: /send_group 123 456 789 Test xabar
+    
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "❌ Format noto'g'ri.\n"
+            "Namuna: `/send_group 123 456 789 Salom, guruh!`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    # ID larni ajratish
+    ids = []
+    message_parts = []
+    
+    for arg in context.args:
+        if arg.isdigit():
+            ids.append(int(arg))
+        else:
+            # Birinchi non-digit qismdan keyin hammasi xabar
+            message_start = context.args.index(arg)
+            message_parts = context.args[message_start:]
+            break
+    
+    if not ids or not message_parts:
+        await update.message.reply_text("❌ ID lar yoki xabar yo'q")
+        return
+    
+    message_text = " ".join(message_parts)
+    
+    await update.message.reply_text(f"⏳ {len(ids)} ta userga xabar yuborilmoqda...")
+    
+    sent = 0
+    failed = 0
+    results = []
+    
+    for user_id in ids:
+        try:
+            # Foydalanuvchi borligini tekshirish
+            user = db_get_user(user_id)
+            if not user:
+                results.append(f"❌ {user_id}: Bazada yo'q")
+                failed += 1
+                continue
+            
+            await context.bot.send_message(chat_id=user_id, text=message_text)
+            results.append(f"✅ {user_id}: {user[1]}")
+            sent += 1
+            
+        except Exception as e:
+            results.append(f"❌ {user_id}: {str(e)[:30]}")
+            failed += 1
+    
+    # Natijalarni chiqarish
+    report = (f"📊 **Guruh xabari natijalari:**\n\n"
+              f"✅ Yuborildi: {sent} ta\n"
+              f"❌ Xatolik: {failed} ta\n\n"
+              f"**Batafsil:**\n")
+    
+    for result in results[:20]:  # Faqat 20 tasini ko'rsatish
+        report += result + "\n"
+    
+    if len(results) > 20:
+        report += f"\n... va yana {len(results)-20} ta"
+    
+    await update.message.reply_text(report)
+
+# 15. /active - Faqat aktiv (oxirgi 7 kun) foydalanuvchilarga
+async def admin_send_active(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    msg = " ".join(context.args)
+    if not msg:
+        await update.message.reply_text("❌ Xabar yo'q. `/active Xabar matni`", parse_mode='Markdown')
+        return
+    
+    # Oxirgi 7 kun ichida ro'yxatdan o'tganlar (qiyinchilik uchun oddiy versiya)
+    # Agar sizda registration_date ustuni bo'lsa, uni qo'shing
+    cursor.execute('''
+        SELECT user_id FROM users 
+        WHERE verified = 1 
+        ORDER BY user_id DESC 
+        LIMIT 500  # Oxirgi 500 tasi
+    ''')
+    
+    users = cursor.fetchall()
+    
+    if not users:
+        await update.message.reply_text("❌ Faol foydalanuvchilar topilmadi")
+        return
+    
+    await update.message.reply_text(f"⏳ {len(users)} ta faol userga xabar yuborilmoqda...")
+    
+    sent = 0
+    blocked = 0
+    
+    for i, row in enumerate(users):
+        try:
+            await context.bot.send_message(chat_id=row[0], text=msg)
+            sent += 1
+            
+            # Progress
+            if i % 100 == 0:
+                await update.message.reply_text(f"📤 {i+1}/{len(users)} yuborildi...")
+                
+        except:
+            blocked += 1
+    
+    await update.message.reply_text(
+        f"✅ Faol foydalanuvchilarga xabar yuborish tugadi!\n"
+        f"✅ Yuborildi: {sent}\n"
+        f"❌ Blok: {blocked}"
+    )
+
 # ---------------------------------------------------------
 #                 ASOSIY BOT FUNKSIYALARI
 # ---------------------------------------------------------
@@ -884,6 +1131,10 @@ def main():
         ("recover", admin_recover),
         ("stats_detailed", admin_stats_detailed),
         ("admin", admin_stat)  # /admin ham /stat kabi ishlaydi
+        ("send", admin_send_message),           # /send
+        ("send_all", admin_send_all),           # /send_all  
+        ("send_group", admin_send_group),       # /send_group
+        ("active", admin_send_active),          # /active
     ]
     
     for cmd, func in admin_commands:
@@ -905,3 +1156,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
