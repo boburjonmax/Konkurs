@@ -1117,7 +1117,7 @@ def main():
     # Start handler
     application.add_handler(CommandHandler("start", start))
     
-    # Admin handlers
+    # Admin handlers (TO'G'RI VERSIYA)
     admin_commands = [
         ("stat", admin_stat),
         ("xabar", admin_broadcast),
@@ -1130,11 +1130,15 @@ def main():
         ("post", admin_post_to_channels),
         ("recover", admin_recover),
         ("stats_detailed", admin_stats_detailed),
-        ("admin", admin_stat)  # /admin ham /stat kabi ishlaydi
+        
+        # --- YANGI FUNKSIYALAR ---
         ("send", admin_send_message),           # /send
         ("send_all", admin_send_all),           # /send_all  
         ("send_group", admin_send_group),       # /send_group
         ("active", admin_send_active),          # /active
+        # -------------------------
+        
+        ("admin", admin_stat)  # /admin ham /stat kabi ishlaydi
     ]
     
     for cmd, func in admin_commands:
@@ -1156,4 +1160,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
