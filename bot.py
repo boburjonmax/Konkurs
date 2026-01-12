@@ -390,7 +390,6 @@ async def send_subscription_message(update):
         [InlineKeyboardButton("📢 Kanal 1", url=f"https://t.me/{CHANNEL_1.lstrip('@')}")],
         [InlineKeyboardButton("📢 Kanal 2", url=f"https://t.me/{CHANNEL_2.lstrip('@')}")],
         [InlineKeyboardButton("📢 Kanal 3", url=f"https://t.me/{CHANNEL_3.lstrip('@')}")],
-        [InlineKeyboardButton("📢 Kanal 4", url=f"https://t.me/{CHANNEL_4.lstrip('@')}")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
