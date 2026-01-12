@@ -114,7 +114,7 @@ def db_get_name(user_id):
     res = cursor.fetchone()
     return res[0] if res else "Noma'lum"
 
-# --- CSV DAN DATABASE TIKLASH FUNKSIYASI ---
+# --- CSV DAN DATABASE TIKLASH FUNKSIYASI ---asdasd
 
 def recover_database_from_csv(csv_file_path='users_list.csv'):
     """
@@ -934,3 +934,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
