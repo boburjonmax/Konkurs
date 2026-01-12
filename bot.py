@@ -5,7 +5,6 @@ import io
 import sqlite3
 import csv
 import os
-import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 from telegram import (
     Update, 
@@ -30,13 +29,10 @@ TOKEN = "7695068578:AAGHYw38i6e8vPKv9YiQ4RvpAjrjOhVS4zs"
 CHANNEL_1 = "@tsuebookclub"
 CHANNEL_2 = "@MantiqLab"
 CHANNEL_3 = "@Edu_Corner"
-
 ADMIN_USER = "@okgoo"
 BOT_USERNAME = "bookclub_konkurs_bot"
-ADMIN_ID = 1814162588  # O'zingizning ID'ingiz
-
-# Rasmning to'g'ridan-to'g'ri linki
 PHOTO_URL = "https://ibb.co/k2Hhm9P3"
+ADMIN_ID = 1814162588
 
 # Logging
 logging.basicConfig(
@@ -48,8 +44,10 @@ logger = logging.getLogger(__name__)
 # --- MA'LUMOTLAR BAZASI (SQLite) ---
 if os.path.exists('/app/data'):
     DB_PATH = '/app/data/konkurs.db'
+    os.makedirs('/app/data', exist_ok=True)
 else:
     DB_PATH = 'konkurs.db'
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
@@ -114,12 +112,10 @@ def db_get_name(user_id):
     res = cursor.fetchone()
     return res[0] if res else "Noma'lum"
 
-# --- CSV DAN DATABASE TIKLASH FUNKSIYASI ---asdasd
+# --- CSV DAN DATABASE TIKLASH FUNKSIYASI (pandas siz) ---
 
 def recover_database_from_csv(csv_file_path='users_list.csv'):
-    """
-    CSV fayldan SQLite database'ni to'liq tiklash
-    """
+    """CSV fayldan SQLite database'ni to'liq tiklash (pandas siz)"""
     logger.info(f"📂 CSV fayldan database tiklash boshlandi: {csv_file_path}")
     
     if not os.path.exists(csv_file_path):
@@ -127,93 +123,82 @@ def recover_database_from_csv(csv_file_path='users_list.csv'):
         return False
     
     try:
+        # Oldingi ma'lumotlarni tozalash
+        cursor.execute('DELETE FROM users')
+        
         # CSV faylni o'qish
-        df = pd.read_csv(csv_file_path)
-        logger.info(f"✅ {len(df)} ta foydalanuvchi topildi")
-        
-        # Database papkasini yaratish
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        
-        # Temporary connection for recovery
-        temp_conn = sqlite3.connect(DB_PATH)
-        temp_cursor = temp_conn.cursor()
-        
-        # Table yaratish (agar yo'q bo'lsa)
-        temp_cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            name TEXT,
-            phone TEXT,
-            referrer_id INTEGER,
-            verified BOOLEAN DEFAULT 0,
-            state TEXT
-        )
-        ''')
-        
-        # Oldingi ma'lumotlarni tozalash (ixtiyoriy)
-        temp_cursor.execute('DELETE FROM users')
-        
-        # Ma'lumotlarni import qilish
         imported_count = 0
         error_count = 0
         
-        for index, row in df.iterrows():
-            try:
-                # CSV ustun nomlari bilan moslashtirish
-                user_id = int(row.get('ID', row.get('user_id', 0)))
-                if user_id == 0:
-                    continue
-                
-                name = str(row.get('Ism', row.get('name', ''))).strip()
-                phone = str(row.get('Telefon', row.get('phone', ''))).strip()
-                
-                # Verified field
-                verified = row.get('Tasdiqlangan', row.get('verified', 0))
-                if isinstance(verified, str):
-                    verified = 1 if verified.lower() in ['true', '1', 'yes', 'ha', '✅'] else 0
-                else:
-                    verified = int(verified) if verified else 0
-                
-                # Referrer field
-                referrer_id = row.get('Kim chaqirgan', row.get('referrer_id', None))
-                if pd.isna(referrer_id) or referrer_id in ['', 'None', '0']:
-                    referrer_id = None
-                else:
-                    try:
-                        referrer_id = int(float(referrer_id)) if referrer_id else None
-                    except:
-                        referrer_id = None
-                
-                # State aniqlash
-                state = 'registered' if verified else 'check_sub'
-                
-                # Database'ga qo'shish
-                temp_cursor.execute('''
-                    INSERT OR REPLACE INTO users 
-                    (user_id, name, phone, referrer_id, verified, state)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (user_id, name, phone, referrer_id, verified, state))
-                
-                imported_count += 1
-                
-                if imported_count % 500 == 0:
-                    logger.info(f"📊 {imported_count} ta foydalanuvchi import qilindi...")
+        with open(csv_file_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            
+            for row in reader:
+                try:
+                    # User ID ni olish
+                    user_id = 0
+                    if 'ID' in row:
+                        user_id = int(row['ID'])
+                    elif 'user_id' in row:
+                        user_id = int(row['user_id'])
                     
-            except Exception as e:
-                error_count += 1
-                logger.error(f"❌ Xato {index}-qatorda: {e}")
-                continue
+                    if user_id == 0:
+                        continue
+                    
+                    # Ism va telefon
+                    name = row.get('Ism', row.get('name', '')).strip()
+                    phone = row.get('Telefon', row.get('phone', '')).strip()
+                    
+                    # Verified field
+                    verified_str = row.get('Tasdiqlangan', row.get('verified', '0'))
+                    if isinstance(verified_str, str):
+                        verified_str = verified_str.lower().strip()
+                        verified = 1 if verified_str in ['true', '1', 'yes', 'ha', '✅', '✓'] else 0
+                    else:
+                        verified = int(verified_str) if verified_str else 0
+                    
+                    # Referrer field
+                    referrer_str = row.get('Kim chaqirgan', row.get('referrer_id', ''))
+                    referrer_id = None
+                    
+                    if referrer_str and str(referrer_str).strip() not in ['', 'None', '0', 'nan', 'NaN']:
+                        try:
+                            # Raqamli bo'lsa
+                            if str(referrer_str).replace('.', '').isdigit():
+                                referrer_id = int(float(referrer_str))
+                            else:
+                                referrer_id = None
+                        except:
+                            referrer_id = None
+                    
+                    # State aniqlash
+                    state = 'registered' if verified else 'check_sub'
+                    
+                    # Database'ga qo'shish
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO users 
+                        (user_id, name, phone, referrer_id, verified, state)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (user_id, name, phone, referrer_id, verified, state))
+                    
+                    imported_count += 1
+                    
+                    if imported_count % 500 == 0:
+                        logger.info(f"📊 {imported_count} ta foydalanuvchi import qilindi...")
+                        
+                except Exception as e:
+                    error_count += 1
+                    logger.error(f"❌ Xato qatorda: {e}")
+                    continue
         
         # Commit qilish
-        temp_conn.commit()
+        conn.commit()
         
         # Statistikani olish
-        temp_cursor.execute('SELECT COUNT(*) FROM users')
-        total = temp_cursor.fetchone()[0]
-        temp_cursor.execute('SELECT COUNT(*) FROM users WHERE verified=1')
-        verified_count = temp_cursor.fetchone()[0]
-        temp_cursor.execute('SELECT COUNT(*) FROM users WHERE referrer_id IS NOT NULL')
-        has_referrer = temp_cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM users')
+        total = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM users WHERE verified=1')
+        verified_count = cursor.fetchone()[0]
         
         logger.info(f"✅ IMPORT TUGADI!")
         logger.info(f"📊 Natijalar:")
@@ -221,15 +206,6 @@ def recover_database_from_csv(csv_file_path='users_list.csv'):
         logger.info(f"   - Xatolar soni: {error_count}")
         logger.info(f"   - Database'dagi jami: {total}")
         logger.info(f"   - Tasdiqlanganlar: {verified_count}")
-        logger.info(f"   - Referrer bilan: {has_referrer}")
-        
-        # Global connection ni yangilash
-        global conn, cursor
-        temp_conn.close()
-        
-        # Yangi connection ochish
-        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        cursor = conn.cursor()
         
         return True
         
@@ -462,7 +438,7 @@ async def admin_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(DB_PATH, 'rb') as f:
             await update.message.reply_document(
                 document=f, 
-                filename=f"konkurs_backup_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.db", 
+                filename=f"konkurs_backup.db", 
                 caption="💾 Database backup"
             )
     except Exception as e:
@@ -536,8 +512,7 @@ async def admin_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Faylni tekshirish
     csv_path = 'users_list.csv'
     if not os.path.exists(csv_path):
-        # Agar fayl yo'q bo'lsa, document sifatida kutish
-        await update.message.reply_text("📁 CSV faylni yuboring (.csv formatida)")
+        await update.message.reply_text("❌ CSV fayl topilmadi. users_list.csv faylini yuklang.")
         return
     
     # Tiklash jarayoni
@@ -554,24 +529,18 @@ async def admin_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ Ruxsat yo'q")
         return
     
-    # Kunlik statistika
+    # Simple daily stats (without pandas)
     cursor.execute('''
-        SELECT DATE(datetime(user_id/1000000, 'unixepoch')) as date,
-               COUNT(*) as daily_registrations
+        SELECT COUNT(*) as today_count
         FROM users 
-        WHERE verified = 1
-        GROUP BY date
-        ORDER BY date DESC
-        LIMIT 7
-    ''')
+        WHERE verified = 1 
+        AND user_id > ?
+    ''', (int((time.time() - 86400) * 1000000),))
     
-    daily_stats = cursor.fetchall()
+    today_count = cursor.fetchone()[0]
     
     msg = "📊 **Batafsil statistika:**\n\n"
-    msg += "📅 **Oxirgi 7 kunlik ro'yxatdan o'tishlar:**\n"
-    
-    for date, count in daily_stats:
-        msg += f"  {date}: {count} kishi\n"
+    msg += f"📅 Bugungi ro'yxatdan o'tishlar: {today_count}\n"
     
     # Eng faol referrerlar
     msg += "\n🏆 **TOP 10 Referrerlar:**\n"
@@ -882,6 +851,8 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #                 MAIN FUNCTION
 # ---------------------------------------------------------
 
+import time  # Import qo'shing
+
 def main():
     # Database tiklashni tekshirish
     csv_path = 'users_list.csv'
@@ -934,4 +905,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
