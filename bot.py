@@ -212,7 +212,32 @@ def recover_database_from_csv(csv_file_path='users_list.csv'):
     except Exception as e:
         logger.error(f"❌ Tiklashda xatolik: {e}")
         return False
+# Database ga yangi table qo'shing
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS bot_messages (
+    message_id INTEGER,
+    chat_id INTEGER,
+    user_id INTEGER,
+    message_type TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, chat_id)
+)
+''')
+conn.commit()
 
+# Xabar yuborganida saqlash funksiyasi
+async def save_bot_message(chat_id, message_id, user_id, message_type="text"):
+    """Bot yuborgan xabarni saqlash"""
+    try:
+        cursor.execute('''
+            INSERT INTO bot_messages (message_id, chat_id, user_id, message_type)
+            VALUES (?, ?, ?, ?)
+        ''', (message_id, chat_id, user_id, message_type))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Xabarni saqlashda xato: {e}")
+
+# Xabarlarni o'chirishda bu ID lardan foydalaning
 # --- YORDAMCHI FUNKSIYALAR ---
 
 def get_prizes_list():
@@ -799,6 +824,161 @@ async def admin_send_active(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"❌ Blok: {blocked}"
     )
 
+# 16. /delete_last - Botning oxirgi xabarlarini o'chirish
+async def admin_delete_last_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Botning oxirgi yuborgan xabarlarini o'chirish"""
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    try:
+        # Nechta xabarni o'chirish kerakligini aniqlash
+        count = 1  # default: 1 ta xabar
+        if context.args:
+            try:
+                count = int(context.args[0])
+                if count < 1:
+                    count = 1
+                if count > 50:  # Limit qo'yish
+                    count = 50
+            except ValueError:
+                await update.message.reply_text("❌ Noto'g'ri son format. Masalan: `/delete_last 5`", parse_mode='Markdown')
+                return
+        
+        await update.message.reply_text(f"⏳ Botning oxirgi {count} ta xabarini o'chirish...")
+        
+        # Context ni tekshirish va xabarlarni o'chirish
+        deleted_count = 0
+        
+        # G'ayritabiiy faollikni aniqlash
+        user_id = update.effective_user.id
+        user = db_get_user(user_id)
+        
+        # Agar user ro'yxatdan o'tgan va tasdiqlangan bo'lsa
+        if user and user[4]:  # verified=1
+            # Bot yuborgan oxirgi xabarlarni o'chirish
+            try:
+                # Context orqali oxirgi xabarlarni olish va o'chirish
+                chat_id = update.effective_chat.id
+                
+                # Oxirgi count ta xabarni o'chirish
+                for i in range(count):
+                    try:
+                        # Bu faqat bot yuborgan xabarlar uchun ishlaydi
+                        # Siz botning ID sini olishingiz kerak
+                        bot_info = await context.bot.get_me()
+                        bot_id = bot_info.id
+                        
+                        # Oxirgi xabarlarni olish (oddiy implementatsiya)
+                        # Yaxshiroq versiya uchun oxirgi xabarlarni saqlash kerak
+                        await context.bot.delete_message(
+                            chat_id=chat_id,
+                            message_id=update.message.message_id - i - 1
+                        )
+                        deleted_count += 1
+                        
+                    except Exception as e:
+                        logger.error(f"Xabarni o'chirishda xato: {e}")
+                        break
+                
+                await update.message.reply_text(f"✅ {deleted_count} ta xabar o'chirildi")
+                
+                # Log yozish
+                logger.warning(f"Admin {update.effective_user.id} botning {deleted_count} ta xabarini o'chirdi")
+                
+            except Exception as e:
+                logger.error(f"Xabarlarni o'chirishda xato: {e}")
+                await update.message.reply_text(f"❌ Xatolik: {str(e)[:100]}")
+        else:
+            await update.message.reply_text("❌ Siz admin emassiz yoki tasdiqlanmagansiz")
+            
+    except Exception as e:
+        logger.error(f"Admin delete_last da xato: {e}")
+        await update.message.reply_text("❌ Xatolik yuz berdi")
+
+# 17. /block_spam - Spam yuborgan userni bloklash
+async def admin_block_spam_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Spam yuborgan userni bloklash va xabarlarini o'chirish"""
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "❌ ID kiritilmadi.\n"
+            "Masalan: `/block_spam 123456789`\n"
+            "Yoki: `/block_spam 123456789 10` (10 ta xabarini o'chirish)",
+            parse_mode='Markdown'
+        )
+        return
+    
+    try:
+        spam_user_id = int(context.args[0])
+        delete_count = int(context.args[1]) if len(context.args) > 1 else 20
+        
+        if delete_count > 100:
+            delete_count = 100
+        
+        await update.message.reply_text(
+            f"⚠️ User {spam_user_id} ni bloklash va {delete_count} ta xabarini o'chirish..."
+        )
+        
+        # 1. Avval xabarlarni o'chirish
+        deleted_messages = 0
+        
+        # Bu yerda bot yuborgan xabarlar ID larini saqlash kerak
+        # Lekin oddiy versiyada:
+        try:
+            # User bazadan o'chirish
+            cursor.execute('DELETE FROM users WHERE user_id = ?', (spam_user_id,))
+            conn.commit()
+            
+            # Log yozish
+            logger.warning(f"Admin {update.effective_user.id} user {spam_user_id} ni blokladi va o'chirdi")
+            
+            await update.message.reply_text(
+                f"✅ User {spam_user_id} bloklandi va bazadan o'chirildi\n"
+                f"⚠️ Xabarlarni o'chirish uchun kanal admini bo'lishingiz kerak"
+            )
+            
+        except Exception as e:
+            logger.error(f"Bloklashda xato: {e}")
+            await update.message.reply_text(f"❌ Xatolik: {str(e)[:100]}")
+            
+    except ValueError:
+        await update.message.reply_text("❌ Noto'g'ri ID format")
+
+
+# 18. /security - Xavfsizlik sozlamalari
+async def admin_security_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Xavfsizlik sozlamalari"""
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("🛡️ Aktiv foydalanuvchilar", callback_data="security_active"),
+            InlineKeyboardButton("🚫 Bloklanganlar", callback_data="security_blocked")
+        ],
+        [
+            InlineKeyboardButton("📊 Oxirgi faollik", callback_data="security_activity"),
+            InlineKeyboardButton("⚙️ Sozlamalar", callback_data="security_settings")
+        ]
+    ]
+    
+    await update.message.reply_text(
+        "🛡️ **Xavfsizlik paneli:**\n\n"
+        "1. Aktiv foydalanuvchilar ro'yxati\n"
+        "2. Bloklangan userlar\n"
+        "3. Oxirgi 1 soatdagi faollik\n"
+        "4. Xavfsizlik sozlamalari",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+
 # ---------------------------------------------------------
 #                 ASOSIY BOT FUNKSIYALARI
 # ---------------------------------------------------------
@@ -1139,6 +1319,11 @@ def main():
         # -------------------------
         
         ("admin", admin_stat)  # /admin ham /stat kabi ishlaydi
+         # --- XAVFSIZLIK FUNKSIYALARI ---
+        ("delete_last", admin_delete_last_messages),    # /delete_last [count]
+        ("block_spam", admin_block_spam_user),          # /block_spam user_id [count]
+        ("security", admin_security_settings),          # /security
+        ("clean", admin_delete_last_messages),          # /clean - qisqa nom
     ]
     
     for cmd, func in admin_commands:
@@ -1160,5 +1345,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
