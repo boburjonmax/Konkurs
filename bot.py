@@ -1298,6 +1298,25 @@ def main():
     application.add_handler(CommandHandler("start", start))
     
     # Admin handlers (TO'G'RI VERSIYA)
+   # main() funksiyasida:
+def main():
+    # Database tiklashni tekshirish
+    csv_path = 'users_list.csv'
+    if os.path.exists(csv_path):
+        logger.info("📂 CSV fayl topildi, database tiklash...")
+        success = recover_database_from_csv(csv_path)
+        if success:
+            logger.info("✅ Database muvaffaqiyatli tiklandi")
+        else:
+            logger.warning("❌ Database tiklashda muammo")
+    
+    # Botni ishga tushirish
+    application = Application.builder().token(TOKEN).build()
+
+    # Start handler
+    application.add_handler(CommandHandler("start", start))
+    
+    # Admin handlers (TO'G'RI VERSIYA)
     admin_commands = [
         ("stat", admin_stat),
         ("xabar", admin_broadcast),
@@ -1316,14 +1335,14 @@ def main():
         ("send_all", admin_send_all),           # /send_all  
         ("send_group", admin_send_group),       # /send_group
         ("active", admin_send_active),          # /active
-        # -------------------------
         
-        ("admin", admin_stat)  # /admin ham /stat kabi ishlaydi
-         # --- XAVFSIZLIK FUNKSIYALARI ---
+        # --- XAVFSIZLIK FUNKSIYALARI ---
         ("delete_last", admin_delete_last_messages),    # /delete_last [count]
         ("block_spam", admin_block_spam_user),          # /block_spam user_id [count]
         ("security", admin_security_settings),          # /security
         ("clean", admin_delete_last_messages),          # /clean - qisqa nom
+        
+        ("admin", admin_stat)  # /admin ham /stat kabi ishlaydi
     ]
     
     for cmd, func in admin_commands:
@@ -1345,6 +1364,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
