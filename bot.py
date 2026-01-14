@@ -25,14 +25,14 @@ from telegram.ext import (
 from telegram.error import BadRequest
 
 # --- SOZLAMALAR ---
-TOKEN = "8109025019:AAHd-BHJefKFq3TgQKxCX3sPw9r8gde5imQ"  # BotFather bergan token
-CHANNEL_1 = "@tsuebookclub"
-CHANNEL_2 = "@MantiqLab"
-CHANNEL_3 = "@Edu_Corner"
-ADMIN_USER = "@okgoo"
-BOT_USERNAME = "bookclub_konkursS_bot"  # Yangi username
+TOKEN = ""  # BotFather bergan token
+CHANNEL_1 = "@"
+CHANNEL_2 = "@"
+CHANNEL_3 = "@"
+ADMIN_USER = "@"
+BOT_USERNAME = "t"  # Yangi username
 PHOTO_URL = "https://ibb.co/k2Hhm9P3"
-ADMIN_ID = 1814162588
+ADMIN_ID = 1
 
 # Logging
 logging.basicConfig(
@@ -483,3 +483,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
