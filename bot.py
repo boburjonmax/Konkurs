@@ -824,6 +824,7 @@ async def admin_send_active(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"❌ Blok: {blocked}"
     )
 
+
 # 16. /delete_last - Botning oxirgi xabarlarini o'chirish
 async def admin_delete_last_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Botning oxirgi yuborgan xabarlarini o'chirish"""
@@ -839,144 +840,171 @@ async def admin_delete_last_messages(update: Update, context: ContextTypes.DEFAU
                 count = int(context.args[0])
                 if count < 1:
                     count = 1
-                if count > 50:  # Limit qo'yish
-                    count = 50
+                if count > 100:  # Limit
+                    count = 100
             except ValueError:
                 await update.message.reply_text("❌ Noto'g'ri son format. Masalan: `/delete_last 5`", parse_mode='Markdown')
                 return
         
-        await update.message.reply_text(f"⏳ Botning oxirgi {count} ta xabarini o'chirish...")
+        chat_id = update.effective_chat.id
+        current_message_id = update.message.message_id
         
-        # Context ni tekshirish va xabarlarni o'chirish
+        await update.message.reply_text(f"⏳ Oxirgi {count} ta bot xabarini o'chirish...")
+        
         deleted_count = 0
+        failed_count = 0
         
-        # G'ayritabiiy faollikni aniqlash
-        user_id = update.effective_user.id
-        user = db_get_user(user_id)
+        # Botning ID sini olish
+        bot_info = await context.bot.get_me()
+        bot_id = bot_info.id
         
-        # Agar user ro'yxatdan o'tgan va tasdiqlangan bo'lsa
-        if user and user[4]:  # verified=1
-            # Bot yuborgan oxirgi xabarlarni o'chirish
+        # Oxirgi xabarlarni o'chirish
+        for i in range(1, count + 1):
             try:
-                # Context orqali oxirgi xabarlarni olish va o'chirish
-                chat_id = update.effective_chat.id
+                # O'chiriladigan xabar ID sini hisoblash
+                message_id_to_delete = current_message_id - i
                 
-                # Oxirgi count ta xabarni o'chirish
-                for i in range(count):
-                    try:
-                        # Bu faqat bot yuborgan xabarlar uchun ishlaydi
-                        # Siz botning ID sini olishingiz kerak
-                        bot_info = await context.bot.get_me()
-                        bot_id = bot_info.id
-                        
-                        # Oxirgi xabarlarni olish (oddiy implementatsiya)
-                        # Yaxshiroq versiya uchun oxirgi xabarlarni saqlash kerak
+                # Xabarni olish (kim yuborganligini tekshirish uchun)
+                try:
+                    message = await context.bot.get_message(chat_id=chat_id, message_id=message_id_to_delete)
+                    
+                    # Faqat bot yuborgan xabarlarni o'chirish
+                    if message.from_user and message.from_user.id == bot_id:
                         await context.bot.delete_message(
                             chat_id=chat_id,
-                            message_id=update.message.message_id - i - 1
+                            message_id=message_id_to_delete
                         )
                         deleted_count += 1
+                        logger.info(f"✅ Xabar {message_id_to_delete} o'chirildi")
+                    else:
+                        logger.info(f"⚠️ Xabar {message_id_to_delete} botniki emas, o'tkazib yuborildi")
+                        continue
                         
-                    except Exception as e:
-                        logger.error(f"Xabarni o'chirishda xato: {e}")
-                        break
-                
-                await update.message.reply_text(f"✅ {deleted_count} ta xabar o'chirildi")
-                
-                # Log yozish
-                logger.warning(f"Admin {update.effective_user.id} botning {deleted_count} ta xabarini o'chirdi")
-                
+                except BadRequest as e:
+                    if "message to delete not found" in str(e):
+                        logger.info(f"⚠️ Xabar {message_id_to_delete} topilmadi")
+                        failed_count += 1
+                    else:
+                        logger.error(f"❌ Xabar o'chirishda xato: {e}")
+                        failed_count += 1
+                        
             except Exception as e:
-                logger.error(f"Xabarlarni o'chirishda xato: {e}")
-                await update.message.reply_text(f"❌ Xatolik: {str(e)[:100]}")
-        else:
-            await update.message.reply_text("❌ Siz admin emassiz yoki tasdiqlanmagansiz")
-            
+                logger.error(f"❌ Xatolik: {e}")
+                failed_count += 1
+        
+        # Natijani chiqarish
+        result_text = (
+            f"✅ **Xabar o'chirish tugadi:**\n\n"
+            f"📊 **Natijalar:**\n"
+            f"✅ O'chirildi: {deleted_count} ta\n"
+            f"❌ Xatolik: {failed_count} ta\n"
+            f"📝 Jami urinish: {count} ta"
+        )
+        
+        if deleted_count == 0 and count > 0:
+            result_text += "\n\n⚠️ **Diqqat:** Hech qanday xabar o'chirilmadi. Sabablari:\n"
+            result_text += "1. Bot bu chatda admin emas\n"
+            result_text += "2. Xabarlar juda eski (48 soatdan oshgan)\n"
+            result_text += "3. Xabarlar bot tomonidan yuborilmagan\n"
+            result_text += "4. Xabarlar allaqachon o'chirilgan"
+        
+        await update.message.reply_text(result_text, parse_mode='Markdown')
+        
+        # Log yozish
+        logger.warning(f"👮 Admin {update.effective_user.id} chat {chat_id} da {deleted_count} ta xabar o'chirdi")
+        
     except Exception as e:
-        logger.error(f"Admin delete_last da xato: {e}")
-        await update.message.reply_text("❌ Xatolik yuz berdi")
+        logger.error(f"❌ Admin delete_last da xato: {e}")
+        await update.message.reply_text(f"❌ Xatolik: {str(e)[:200]}")
 
-# 17. /block_spam - Spam yuborgan userni bloklash
-async def admin_block_spam_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Spam yuborgan userni bloklash va xabarlarini o'chirish"""
+# 17. /clean_chat - Chatni tozalash (barcha bot xabarlarini)
+async def admin_clean_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Chatdagi barcha bot xabarlarini o'chirish"""
     if not is_admin(update.effective_user): 
         await update.message.reply_text("❌ Ruxsat yo'q")
         return
     
-    if not context.args:
+    try:
+        chat_id = update.effective_chat.id
+        current_message_id = update.message.message_id
+        
         await update.message.reply_text(
-            "❌ ID kiritilmadi.\n"
-            "Masalan: `/block_spam 123456789`\n"
-            "Yoki: `/block_spam 123456789 10` (10 ta xabarini o'chirish)",
+            "⚠️ **DIQQAT:** Bu barcha bot xabarlarini o'chiradi!\n\n"
+            "Davom etish uchun 'HA' deb yozing:"
+        )
+        
+        # Kutish holatini saqlash
+        context.user_data['clean_chat_pending'] = True
+        context.user_data['clean_chat_start_id'] = current_message_id
+        
+    except Exception as e:
+        logger.error(f"❌ Clean chat da xato: {e}")
+
+# 18. /delete_message - Maxsus xabarni ID bo'yicha o'chirish
+async def admin_delete_specific_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Xabar ID si bo'yicha o'chirish"""
+    if not is_admin(update.effective_user): 
+        await update.message.reply_text("❌ Ruxsat yo'q")
+        return
+    
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text(
+            "❌ Xabar ID sini kiriting.\n"
+            "Masalan: `/delete_msg 12345`\n"
+            "Yoki: `/delete_msg 12345 12346 12347` (bir nechta)",
             parse_mode='Markdown'
         )
         return
     
+    chat_id = update.effective_chat.id
+    
     try:
-        spam_user_id = int(context.args[0])
-        delete_count = int(context.args[1]) if len(context.args) > 1 else 20
+        deleted_count = 0
+        failed_count = 0
+        results = []
         
-        if delete_count > 100:
-            delete_count = 100
+        for msg_id_str in context.args:
+            try:
+                msg_id = int(msg_id_str)
+                
+                # Xabarni o'chirish
+                await context.bot.delete_message(
+                    chat_id=chat_id,
+                    message_id=msg_id
+                )
+                deleted_count += 1
+                results.append(f"✅ {msg_id}: O'chirildi")
+                
+            except BadRequest as e:
+                if "message to delete not found" in str(e):
+                    results.append(f"❌ {msg_id}: Topilmadi")
+                else:
+                    results.append(f"❌ {msg_id}: {str(e)[:30]}")
+                failed_count += 1
+            except ValueError:
+                results.append(f"❌ {msg_id_str}: Noto'g'ri format")
+                failed_count += 1
+            except Exception as e:
+                results.append(f"❌ {msg_id_str}: {str(e)[:30]}")
+                failed_count += 1
         
-        await update.message.reply_text(
-            f"⚠️ User {spam_user_id} ni bloklash va {delete_count} ta xabarini o'chirish..."
-        )
+        # Natijalarni chiqarish
+        result_text = f"📊 **Xabar o'chirish natijalari:**\n\n"
+        result_text += f"✅ O'chirildi: {deleted_count} ta\n"
+        result_text += f"❌ Xatolik: {failed_count} ta\n\n"
+        result_text += "**Batafsil:**\n"
         
-        # 1. Avval xabarlarni o'chirish
-        deleted_messages = 0
+        for result in results[:10]:  # Faqat 10 tasini ko'rsatish
+            result_text += result + "\n"
         
-        # Bu yerda bot yuborgan xabarlar ID larini saqlash kerak
-        # Lekin oddiy versiyada:
-        try:
-            # User bazadan o'chirish
-            cursor.execute('DELETE FROM users WHERE user_id = ?', (spam_user_id,))
-            conn.commit()
-            
-            # Log yozish
-            logger.warning(f"Admin {update.effective_user.id} user {spam_user_id} ni blokladi va o'chirdi")
-            
-            await update.message.reply_text(
-                f"✅ User {spam_user_id} bloklandi va bazadan o'chirildi\n"
-                f"⚠️ Xabarlarni o'chirish uchun kanal admini bo'lishingiz kerak"
-            )
-            
-        except Exception as e:
-            logger.error(f"Bloklashda xato: {e}")
-            await update.message.reply_text(f"❌ Xatolik: {str(e)[:100]}")
-            
-    except ValueError:
-        await update.message.reply_text("❌ Noto'g'ri ID format")
-
-
-# 18. /security - Xavfsizlik sozlamalari
-async def admin_security_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Xavfsizlik sozlamalari"""
-    if not is_admin(update.effective_user): 
-        await update.message.reply_text("❌ Ruxsat yo'q")
-        return
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("🛡️ Aktiv foydalanuvchilar", callback_data="security_active"),
-            InlineKeyboardButton("🚫 Bloklanganlar", callback_data="security_blocked")
-        ],
-        [
-            InlineKeyboardButton("📊 Oxirgi faollik", callback_data="security_activity"),
-            InlineKeyboardButton("⚙️ Sozlamalar", callback_data="security_settings")
-        ]
-    ]
-    
-    await update.message.reply_text(
-        "🛡️ **Xavfsizlik paneli:**\n\n"
-        "1. Aktiv foydalanuvchilar ro'yxati\n"
-        "2. Bloklangan userlar\n"
-        "3. Oxirgi 1 soatdagi faollik\n"
-        "4. Xavfsizlik sozlamalari",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-
+        if len(results) > 10:
+            result_text += f"\n... va yana {len(results)-10} ta"
+        
+        await update.message.reply_text(result_text, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"❌ Delete specific message da xato: {e}")
+        await update.message.reply_text(f"❌ Xatolik: {str(e)[:200]}")
 
 
 # ---------------------------------------------------------
@@ -1364,6 +1392,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
